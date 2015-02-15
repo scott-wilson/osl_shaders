@@ -1,0 +1,77 @@
+#include <stdosl.h>
+
+
+float cheap_fresnel(float alpha, normal norm){
+    // Based off of the Shlick Approximation
+    //
+    // Args:
+    //  alpha: The amount of fresnel.
+    //  norm: The normal of the surface.
+    //
+    // Returns:
+    //  The fresnel amount at the surface point.
+
+    return pow(alpha + (1.0 - alpha) * (1.0 - dot(norm, I)), 5);
+}
+
+
+closure color lerp(closure color material_1, closure color material_2, float alpha){
+    // Had to create a lerp function because mix doesn't work...
+    //
+    // Args:
+    //  material_1: The first material to mix.
+    //  material_2: The second material to mix.
+    //  alpha: The amount of each contribution.
+    //
+    // Returns:
+    //  The mixed material that is the result of the two input materials.
+
+    return material_1 * (1.0 - alpha) + material_2 * alpha;
+}
+
+
+shader UE4SurfaceMaterial(color Color = color(0.8, 0.8, 0.8),
+               float Metallic = 0.0,
+               float Specular = 0.0,
+               float Roughness = 0.0,
+               normal Normal = N,
+               output closure color BSDF = 0){
+    // A surface material to mimic Unreal Engine 4's surface material. It
+    // doesn't handle emission, refraction/ transparency, and sub-surface
+    // scattering.
+    //
+    // It is also based off of the metalness workflow, so 100% metalness will
+    // completely disable the albedo colour.
+
+    // Args:
+    //  Color: The base colour (albedo colour). This also drives the
+    //      reflective colour if Metallic > 0.0.
+    //  Metallic: The metalness of the surface.
+    //  Specular: The amount of reflectiveness of the material. This directly
+    //      controls the fresnel.
+    //  Roughness: The roughness of the reflective and diffuse shaders.
+    //  Normal: The normal of the material, for normal mapping.
+    //
+    // Returns:
+    //  BSDF: The final BSDF of the material.
+
+
+    // Sanitize the Metallic, Specular, and Roughness to make sure it is
+    // between 0.0 to 1.0.
+
+    float metallic = clamp(Metallic, 0.0, 1.0);
+    float specular = clamp(Specular, 0.0, 1.0);
+    float roughness = clamp(Roughness, 0.0, 1.0);
+
+    closure color diffuse_shader = oren_nayar(Normal, roughness);
+    closure color reflect_shader = microfacet_ggx(Normal, roughness);
+    // Control how much of the fresnel is controlling the material mix, by the
+    // metallic amount.
+    float fresnel_amount = mix(cheap_fresnel(specular, Normal), 1.0, metallic);
+
+    closure color base_material = diffuse_shader * Color;
+    color reflect_color = mix(color(1.0, 1.0, 1.0), Color, metallic);
+    closure color reflect_material = reflect_shader * reflect_color;
+
+    BSDF = lerp(base_material, reflect_material, fresnel_amount);
+}
