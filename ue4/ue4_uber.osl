@@ -1,3 +1,6 @@
+// A Unreal Engine 4 shader recreation for Cycles's Open Shading Language
+// implementation.
+
 #include <stdosl.h>
 
 
